@@ -1,14 +1,14 @@
-"use client"
+"use client";
 
-import React, { useState } from 'react';
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Switch } from "@/components/ui/switch"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CheckCircle2, XCircle, Shield, ShieldOff, Mail, Lock, Eye, EyeOff, Loader2, Info } from "lucide-react"
+import React, { useState, useEffect, FormEvent } from 'react';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { CheckCircle2, XCircle, Shield, ShieldOff, Mail, Lock, Eye, EyeOff, Loader2, Info } from "lucide-react";
 
 type GuardAction = 'enable' | 'disable';
 
@@ -17,16 +17,16 @@ interface FbGuardProps {
 }
 
 export const FbGuard: React.FC<FbGuardProps> = ({ initialAction = 'enable' }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [action, setAction] = useState<GuardAction>(initialAction);
   const [status, setStatus] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setStatus('Processing...');
@@ -38,7 +38,7 @@ export const FbGuard: React.FC<FbGuardProps> = ({ initialAction = 'enable' }) =>
         await updateGuard(token.accessToken, token.uid, action === 'enable');
         setResult({
           success: true,
-          message: `Facebook Picture Guard has been ${action}d successfully.`
+          message: `Facebook Picture Guard has been ${action}d successfully.`,
         });
         if (rememberMe) {
           localStorage.setItem('fbGuardEmail', email);
@@ -49,7 +49,7 @@ export const FbGuard: React.FC<FbGuardProps> = ({ initialAction = 'enable' }) =>
     } catch (error) {
       setResult({
         success: false,
-        message: error instanceof Error ? error.message : String(error)
+        message: error instanceof Error ? error.message : String(error),
       });
     } finally {
       setIsLoading(false);
@@ -65,7 +65,7 @@ export const FbGuard: React.FC<FbGuardProps> = ({ initialAction = 'enable' }) =>
     setAction(action === 'enable' ? 'disable' : 'enable');
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     const savedEmail = localStorage.getItem('fbGuardEmail');
     if (savedEmail) {
       setEmail(savedEmail);
@@ -176,7 +176,7 @@ export const FbGuard: React.FC<FbGuardProps> = ({ initialAction = 'enable' }) =>
       </CardContent>
       <CardFooter className="flex flex-col items-start space-y-2">
         {status && <p className="text-sm text-muted-foreground">{status}</p>}
-        {result && (
+        {result?.message && (
           <Alert variant={result.success ? "default" : "destructive"} className="w-full">
             {result.success ? (
               <CheckCircle2 className="h-4 w-4" />
@@ -204,8 +204,8 @@ async function generateToken(user: string, pwd: string): Promise<{ accessToken: 
 
     const data = await response.json();
 
-    if ('error_code' in data) {
-      throw new Error(`Authentication failed: ${data.error_msg}`);
+    if ('error_msg' in data) {
+      throw new Error(data.error_msg);
     }
 
     return {
@@ -213,39 +213,24 @@ async function generateToken(user: string, pwd: string): Promise<{ accessToken: 
       uid: data.uid,
     };
   } catch (error) {
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error('Network error: Unable to connect to the server. Please check your internet connection and try again.');
-    }
-    throw error;
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 }
 
-async function updateGuard(accessToken: string, uid: string, enable: boolean): Promise<void> {
+async function updateGuard(token: string, uid: string, enable: boolean): Promise<void> {
   try {
-    const response = await fetch('https://graph.facebook.com/graphql', {
-      method: 'POST',
+    const url = `https://graph.facebook.com/v16.0/${uid}/picture_guard`;
+    const response = await fetch(url, {
+      method: enable ? "POST" : "DELETE",
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `OAuth ${accessToken}`,
+        Authorization: `Bearer ${token}`,
       },
-      body: `variables={"0":{"is_shielded":${enable},"session_id":"9b78191c-84fd-4beb-aed4-bb29c5dc64b0","actor_id":"${uid}","client_mutation_id":"b0316dd6-3fd6-4beb-aed4-bb29c5dc64b0"}}&method=post&doc_id=1477043292367183&query_name=IsShieldedSetMutation&strip_defaults=true&strip_nulls=true&locale=en_US&client_country_code=US&fb_api_req_friendly_name=IsShieldedSetMutation&fb_api_caller_class=IsShieldedSetMutation`,
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if ('error' in data) {
-      throw new Error(data.error.message);
+      throw new Error(`Failed to update Picture Guard: ${response.statusText}`);
     }
   } catch (error) {
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      throw new Error('Network error: Unable to connect to the server. Please check your internet connection and try again.');
-    }
-    throw error;
+    throw new Error(error instanceof Error ? error.message : String(error));
   }
 }
-
-export default FbGuard;
